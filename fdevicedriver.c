@@ -6,7 +6,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "sectormap.h"
+#include "blockmap.h"
 
 extern FILE *flashfp;
 
