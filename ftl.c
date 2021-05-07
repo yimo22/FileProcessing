@@ -8,7 +8,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "blockmap.h"
-//#define DEBUG 0
+
+void SetSparebuff(char *ptr, int num1, int num2, int num3);
+
 // 필요한 경우 헤더 파일을 추가하시오.
 
 int tb[DATABLKS_PER_DEVICE];
@@ -19,32 +21,65 @@ int Free_block_Pos;
 // file system에 의해 반드시 먼저 호출이 되어야 한다.
 //
 
+/****************************************************************************
+* 새로쓰기의 경우, 0~15 pbn 중 15번이 freeblock 으로 고정됨.
+* 	i lbn 은 i pbn과 match, ex) lbn 4번 == pbn 4번
+* 불러오기의 경우, 사용하지 않는 block 중 number가 가장 큰 block 이 freeblock 이된다.
+*****************************************************************************/
 
-// 불러오기 기능이 되는지 check
 void ftl_open()
 {
+	char *pagebuf = (char *)malloc(PAGE_SIZE);
+	int lbn;
 	//
 	// address mapping table 초기화 또는 복구
 	// free block's pbn 초기화
-  // address mapping table에서 lbn 수는 DATABLKS_PER_DEVICE 동일
-	for(int i = 0; i < DATABLKS_PER_DEVICE; i++)
+	// address mapping table에서 lbn 수는 DATABLKS_PER_DEVICE 동일
+
+	/* FTL 초기화 */
+	for (int i = 0; i < DATABLKS_PER_DEVICE; i++)
+		tb[i] = -1;
+
+	// Block 을 순회하여, lbn 값을 읽어옴.
+	// lbn이 0xFFFFFFFF일 경우 새로쓰기, 아닐경우 tb[lbn]에 해당 pbn을 할당.
+	for (int i = 0; i < BLOCKS_PER_DEVICE; i++)
 	{
-		memset(tb+i,0xFFFFFFFF,sizeof(int));
-	}
-	char *pagebuf = (char *)malloc(PAGE_SIZE);
-	int lbn;
-	for(int i=0;i<DATABLKS_PER_DEVICE;i++){
-		dd_read(i*PAGES_PER_BLOCK,pagebuf);
-		memmove(&lbn,pagebuf+SECTOR_SIZE,4);
-		if(lbn == 0xFFFFFFFF){
-			tb[DATABLKS_PER_DEVICE - i] = -1;
+		int res = dd_read(i * PAGES_PER_BLOCK, pagebuf);
+		if (res != 1)
+		{
+			fprintf(stderr, "dd_read Error\n");
+			exit(1);
 		}
-		else{
+		memcpy(&lbn, pagebuf + SECTOR_SIZE, 4);
+		// Load
+		if (lbn != 0xFFFFFFFF)
+		{
+			lbn &= 0x000000FF;
 			tb[lbn] = i;
 		}
+		// New
+		else
+		{
+			/* Flash Memory 초기화 */
+			dd_erase(i);
+		}
 	}
-	for(int i=0;i<DATABLKS_PER_DEVICE;i++){
-		if(tb[i] == -1){
+
+	/* 여기서부터 Freeblock에 관한 것임 */
+	// pbn 15번 부터 0번까지 순회하면서, free block설정.
+	// 새로쓰기의 경우, 0~15 pbn 중 15번이 freeblock
+	// 불러오기의 경우, 사용하지 않는 block 중 number가 가장 큰 block 이 freeblock 이된다.
+	for (int i = (BLOCKS_PER_DEVICE - 1); i >= 0; i--)
+	{
+		int res = dd_read(i * PAGES_PER_BLOCK, pagebuf);
+		if (res != 1)
+		{
+			fprintf(stderr, "dd_read Error\n");
+			exit(1);
+		}
+		memcpy(&lbn, pagebuf + SECTOR_SIZE, 4);
+		if (lbn == 0xFFFFFFFF)
+		{
 			Free_block_Pos = i;
 			break;
 		}
@@ -58,11 +93,19 @@ void ftl_open()
 //
 void ftl_read(int lsn, char *sectorbuf)
 {
-	memset(sectorbuf,0xFF,SECTOR_SIZE);
+	// memory set
+	memset(sectorbuf, 0xFF, SECTOR_SIZE);
 	char *pagebuf = (char *)malloc(PAGE_SIZE);
-	memset(pagebuf,0xFF,PAGE_SIZE);
+	memset(pagebuf, 0xFF, PAGE_SIZE);
+
 	// ppn = pbn * PAGES_PER_BLOCK + offset
-	dd_read(Getppn(lsn), pagebuf);
+	int res = dd_read(Getppn(lsn), pagebuf);
+	if (res != 1)
+	{
+		fprintf(stderr, "dd_read Error\n");
+		exit(1);
+	}
+
 	// Sector 영역 buff로 copy.
 	memcpy(sectorbuf, pagebuf, SECTOR_SIZE);
 	return;
@@ -74,96 +117,165 @@ void ftl_read(int lsn, char *sectorbuf)
 //
 void ftl_write(int lsn, char *sectorbuf)
 {
-	// pagebuf의 sector영역에 저장, 필요에 따라 pagebuf의 spare영역에 메타 데이터(lsn,lbn등) 저장
-	// 이 pagebuf를 인자값으로 dd_write()에 전달. (physical page number 전달)
-		#ifdef DEBUG 
-		printf("=====================ftl_write===================\n");
-		printf("secotbuf : %s\n",sectorbuf);
-		#endif
-		char *pagebuf = (char *)malloc(PAGE_SIZE);
-		char * sparebuf = (char *)malloc(SPARE_SIZE);
-	
-		memcpy(pagebuf,sectorbuf,SECTOR_SIZE);
-		// 최초 쓰기
-	if(Getpbn(lsn) == -1){
-		#ifdef DEBUG 
-		printf("=====================New===================\n");
-		#endif
+	char *pagebuf = (char *)malloc(PAGE_SIZE);
+	memset(pagebuf, 0xFF, PAGE_SIZE);
+	char *sparebuf = (char *)malloc(SPARE_SIZE);
+	memset(sparebuf, 0xFF, SPARE_SIZE);
 
-		// Table 복구용 LBN + 갱신여부 LSN + 하위8byte 초기화
-		memset(sparebuf,Getlbn(lsn),4);
-		memset(sparebuf+4,lsn,4);
-		memset(sparebuf+8,0xFF,8);
-
-		// Pagebuf에 copy
-		memcpy(pagebuf+SECTOR_SIZE,sparebuf,SPARE_SIZE);
+	// 최초 쓰기
+	if (Getpbn(lsn) == -1)
+	{
 
 		// address mapping table 갱신
-		tb[Getlbn(lsn)] = DATABLKS_PER_DEVICE - Getlbn(lsn);
-		#ifdef DEBUG 
-		printf("=====================New END===================\n");
-		#endif
-	}
-	// update
-	else{
-		#ifdef DEBUG 
-		printf("=====================update===================\n");
-		#endif
-		char * temp_page = (char *)malloc(PAGE_SIZE);
-		int pbn = Getpbn(lsn);
+		tb[Getlbn(lsn)] = Getlbn(lsn);
 
-		// Copy to free block
-		for(int i=0;i<PAGES_PER_BLOCK;i++){
-			if(i == Getoffset(lsn))
-				continue;
-			dd_read(i+Getpbn(lsn)*PAGES_PER_BLOCK,temp_page);
-			dd_write(i+Free_block_Pos*PAGES_PER_BLOCK,temp_page);
+		// Table 복구용 LBN 값 삽입.
+		memset(sparebuf, Getlbn(lsn), 4);
+		memcpy(pagebuf + SECTOR_SIZE, sparebuf, 4);
+		dd_write(Getpbn(lsn) * PAGES_PER_BLOCK, pagebuf);
+
+		//갱신여부 LSN + 하위8byte 초기화
+		if (Getoffset(lsn) != 0) // offset 이 0이 아니어서 block의 첫번쨰 경우에 써지지 않는 경우
+			SetSparebuff(sparebuf, 0xFF, lsn, 0xFF);
+		else // offset이 0이여서 block의 첫번째에 써지는 경우
+			SetSparebuff(sparebuf, Getlbn(lsn), lsn, 0xFF);
+
+		// Pagebuf에 sectorbuff와 sparebuff를 각각 copy
+		memset(pagebuf, 0xFF, PAGE_SIZE);
+		memcpy(pagebuf, sectorbuf, SECTOR_SIZE);
+		memcpy(pagebuf + SECTOR_SIZE, sparebuf, SPARE_SIZE);
+
+		// flashmemory에 작성
+		int res = dd_write(Getppn(lsn), pagebuf);
+		if (res != 1)
+		{
+			fprintf(stderr, "dd_write Error\n");
+			exit(1);
 		}
-		free(temp_page);
-
-		// Erase block
-		dd_erase(pbn);
-
-		// update data
-		memset(sparebuf,Getlbn(lsn),4);
-		memset(sparebuf+4,lsn,4);
-		memcpy(pagebuf+SECTOR_SIZE,sparebuf,SPARE_SIZE);
-
-		// address mapping table 갱신
-		// free block 갱신
-		tb[Getlbn(lsn)] = Free_block_Pos;
-		Free_block_Pos = pbn;
-
-
-		#ifdef DEBUG 
-		printf("=====================update END===================\n");
-		#endif
+		free(sparebuf);
+		free(pagebuf);
 	}
-	dd_write(Getppn(lsn),pagebuf);
-	free(sparebuf);
-	free(pagebuf);
+	// overwrite(해당 ppn에 data가 존재하는 경우) or insert(해당 ppn에 data가 존재하지 않지만, pbn에는 존재하는 경우)
+	else
+	{
+		int pbn = Getpbn(lsn);
+		dd_read(Getppn(lsn), pagebuf);
+		int lsn_cmp = 0xFFFFFFFF;
+		memcpy(&lsn_cmp, pagebuf + SECTOR_SIZE + 4, 4);
+		memset(pagebuf, 0xFF, PAGE_SIZE);
+		// insert(해당 ppn에 data는 존재하지 않지만, pbn에는 존재하는 경우)
+		if (lsn_cmp == 0xFFFFFFFF)
+		{
+			if (Getoffset(lsn) != 0) // pbn 의 첫번쨰 page에 작성되지 않는 경우
+				SetSparebuff(sparebuf, 0xFF, lsn, 0xFF);
+			else // pbn 의 첫번쨰 page에 작성되는 경우
+				SetSparebuff(sparebuf, Getlbn(lsn), lsn, 0xFF);
+
+			// pagebuf update.
+			memcpy(pagebuf + SECTOR_SIZE, sparebuf, SPARE_SIZE);
+			memcpy(pagebuf, sectorbuf, SECTOR_SIZE);
+			// flash memory에 write
+			dd_write(Getppn(lsn), pagebuf);
+		}
+		// overwrite(해당 ppn에 data가 존재, 덮어쓰기 하는경우 - freeblock 이용)
+		else
+		{
+			// Copy to free block
+			for (int i = 0; i < PAGES_PER_BLOCK; i++)
+			{
+				if (i == Getoffset(lsn))
+					continue;
+				// Copy useful data
+				int res = dd_read(i + pbn * PAGES_PER_BLOCK, pagebuf);
+				if (res != 1)
+				{
+					fprintf(stderr, "dd_read Error\n");
+					exit(1);
+				}
+				// Paste useful data to free block
+				res = dd_write(i + Free_block_Pos * PAGES_PER_BLOCK, pagebuf);
+				if (res != 1)
+				{
+					fprintf(stderr, "dd_write Error\n");
+					exit(1);
+				}
+			}
+			free(pagebuf);
+
+			// Erase block
+			int res = dd_erase(pbn);
+			if (res != 1)
+			{
+				fprintf(stderr, "dd_erase Error\n");
+				exit(1);
+			}
+
+			// Table 복구용 LBN 값 삽입.
+			memset(sparebuf, Getlbn(lsn), 4);
+			memcpy(pagebuf + SECTOR_SIZE, sparebuf, 4);
+			dd_write(Free_block_Pos * PAGES_PER_BLOCK, pagebuf);
+
+			// 갱신여부 LSN + 하위8byte 초기화
+			if (Getoffset(lsn) != 0)
+				SetSparebuff(sparebuf, 0xFF, lsn, 0xFF);
+			else
+				SetSparebuff(sparebuf, Getlbn(lsn), lsn, 0xFF);
+
+			// update pagebuff
+			memset(pagebuf, 0xFF, PAGE_SIZE);
+			memcpy(pagebuf, sectorbuf, SECTOR_SIZE);
+			memcpy(pagebuf + SECTOR_SIZE, sparebuf, SPARE_SIZE);
+
+			// write pagebuff
+			res = dd_write(Free_block_Pos * PAGES_PER_BLOCK + Getoffset(lsn), pagebuf);
+			if (res != 1)
+			{
+				fprintf(stderr, "dd_write Error\n");
+				exit(1);
+			}
+			// address mapping table 갱신
+			// free block 갱신
+			tb[Getlbn(lsn)] = Free_block_Pos;
+			Free_block_Pos = pbn;
+			free(sparebuf);
+			free(pagebuf);
+		}
+	}
 	return;
 }
 
 void ftl_print()
 {
 	printf("lbn\tpbn\n");
-	for(int i=0;i<DATABLKS_PER_DEVICE;i++){
-		printf("%d\t%d\n",i,tb[i]);
+	for (int i = 0; i < DATABLKS_PER_DEVICE; i++)
+	{
+		printf("%d\t%d\n", i, tb[i]);
 	}
-	printf("free block's pbn=%d\n",Free_block_Pos);
+	printf("free block's pbn=%d\n", Free_block_Pos);
 	return;
 }
-int Getpbn(int lsn){
+int Getpbn(int lsn)
+{
 	return tb[Getlbn(lsn)];
 }
-int Getoffset(int lsn){
+int Getoffset(int lsn)
+{
 	return lsn % PAGES_PER_BLOCK;
 }
-int Getppn(int lsn){
+int Getppn(int lsn)
+{
 	return Getpbn(lsn) * PAGES_PER_BLOCK + Getoffset(lsn);
 }
-int Getlbn(int lsn){
+int Getlbn(int lsn)
+{
 	return lsn / PAGES_PER_BLOCK;
 }
-
+void SetSparebuff(char *ptr, int num1, int num2, int num3)
+{
+	// lbn 부분 를 num1으로 초기화
+	memset(ptr, num1, 4);
+	// lsn 부분 를 num2로 초기화
+	memset(ptr + 4, num2, 4);
+	// 하위 8byte 를 num3로 초기화
+	memset(ptr + 8, num3, 8);
+}
