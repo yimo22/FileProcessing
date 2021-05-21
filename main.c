@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     char sectorbuf[SECTOR_SIZE];
 	int lsn, i;
 
-    devicefp = fopen("flashmemory", "w+b");
+    flashfp = fopen("flashmemory", "w+b");
 	if(flashfp == NULL)
 	{
 		printf("file open error\n");
