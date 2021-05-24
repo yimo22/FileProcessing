@@ -5,16 +5,14 @@
 //필요한 경우 헤더 파일과 함수를 추가할 수 있음
 
 #define DEBUG 1
-#define HEADER_AREA_totalrecord 4
-#define HEADER_AREA_offset 4
-#define HEADER_AREA_length 4
+#define HEADER_AREA_totalrecord_SIZE 4
+#define HEADER_AREA_offset_SIZE 4
+#define HEADER_AREA_length_SIZE 4
+
+void Making_newPage(FILE *fp , char * databuff);
 
 /* This is for RECORD FILE */
 const int HEADER_RECORD_SIZE = 16;
-int TOTAL_PAGE_NUM;
-int TOTAL_RECORD_NUM;
-int PAGE_NUM;
-int RECORD_NUM;
 
 // 과제 설명서대로 구현하는 방식은 각자 다를 수 있지만 약간의 제약을 둡니다.
 // 레코드 파일이 페이지 단위로 저장 관리되기 때문에 사용자 프로그램에서 레코드 파일로부터 데이터를 읽고 쓸 때도
@@ -45,6 +43,8 @@ void readPage(FILE *fp, char *pagebuf, int pagenum)
 		Argument check from HEADER RECORD
 		- whether indicated page is deleted
 	*/
+
+	/*
 	if(fread(&TOTAL_PAGE_NUM,sizeof(int),1,fp) < 0){
 		fprintf(stderr,"error - fread(TOTAL_PAGE_NUM\n");
 		exit(1);
@@ -66,9 +66,11 @@ void readPage(FILE *fp, char *pagebuf, int pagenum)
 		exit(1);
 	}
 	// mv FILE seek point
+
+	*/
 	fseek(fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum,SEEK_SET);
 	// Read 
-	if(fread(pagebuf,sizeof(int),PAGE_SIZE,fp) < 0){
+	if(fread(pagebuf,sizeof(char),PAGE_SIZE,fp) < 0){
 		fprintf(stderr,"error - fread(pagebuf)\n");
 		exit(1);
 	}
@@ -81,15 +83,20 @@ void readPage(FILE *fp, char *pagebuf, int pagenum)
 //
 void writePage(FILE *fp, const char *pagebuf, int pagenum)
 {
-	// HEADER RECORD update
-	fseek(fp,0,SEEK_SET);
-	fwrite(&TOTAL_PAGE_NUM,sizeof(int),1,fp);
-	fwrite(&TOTAL_RECORD_NUM,sizeof(int),1,fp);
-	fwrite(&PAGE_NUM,sizeof(int),1,fp);
-	fwrite(&RECORD_NUM,sizeof(int),1,fp);
 	// Write Pagebuf
-	fseek(fp,HEADER_RECORD_SIZE + PAGE_SIZE * pagenum , SEEK_SET);
+	#ifdef DEBUG
+		printf("\tMoving to pagenum : %d\n",pagenum);
+		fseek(fp,0,SEEK_END);
+		int b_filesize = ftell(fp);
+		printf("\tbefore file size : %d\n",b_filesize);
+	#endif
+	fseek(fp,pagenum * PAGE_SIZE + HEADER_RECORD_SIZE,SEEK_SET);
 	fwrite(pagebuf,sizeof(char),PAGE_SIZE,fp);
+	#ifdef DEBUG
+		fseek(fp,0,SEEK_END);
+		int af_filesize = ftell(fp);
+		printf("\tafter file size : %d\n",af_filesize);
+	#endif
 }
 
 //
@@ -157,123 +164,298 @@ void pack(char *recordbuf, const Person *p)
 // 
 // 아래의 unpack() 함수는 recordbuf에 저장되어 있는 레코드를 구조체로 변환할 때 사용한다.
 //
-void unpack(const char *recordbuf, Person *p)
+void unpack(char *recordbuf, Person *p)
 {
-	char * ptr;
-	ptr = strtok(recordbuf, "#");
-	strcpy(p->id, ptr);
-
-	ptr = strtok(NULL, "#");
-	strcpy(p->name, ptr);
-	ptr = strtok(NULL, "#");
-	strcpy(p->age, ptr);
-	ptr = strtok(NULL, "#");
-	strcpy(p->addr, ptr);
-	ptr = strtok(NULL, "#");
-	strcpy(p->phone, ptr);
-	ptr = strtok(NULL, "#");
-	strcpy(p->email, ptr);
-
-#ifdef DEBUG
-		printf("<<unpack>>\n");
-		printf(" >> id : %s\n",p->id);
-		printf(" >> name : %s\n",p->name);
-		printf(" >> age : %s\n",p->age);
-		printf(" >> addr : %s\n",p->addr);
-		printf(" >> phone : %s\n",p->phone);
-		printf(" >> email : %s\n",p->email);
-	#endif
+	sprintf(recordbuf,"%s#%s#%s#%s#%s#%s#",p->id,p->name,p->age,p->addr,p->phone,p->email);
 	return ;
 }
 
+
+int Get_Datapage_FROM_HEADRECORD(FILE * fp){
+	fseek(fp,0,SEEK_SET);
+	int temp;
+	fread(&temp,sizeof(int),1,fp);
+	return temp;
+}
+int Get_Allrecord_FROM_HEADRECORD(FILE * fp){
+	fseek(fp,4,SEEK_SET);
+	int temp;
+	fread(&temp,sizeof(int),1,fp);
+	return temp;
+}
+int Get_Deleted_page_FROM_HEADRECORD(FILE * fp){
+	fseek(fp,8,SEEK_SET);
+	int temp;
+	fread(&temp,sizeof(int),1,fp);
+	return temp;
+}
+int Get_Deleted_record_FROM_HEADRECORD(FILE * fp){
+	fseek(fp,12,SEEK_SET);
+	int temp;
+	fread(&temp,sizeof(int),1,fp);
+	return temp;
+}
+
+void Update_HeaderRecord(FILE * fp, int totalPage, int totalRecord, int Deletd_page, int Delted_record){
+	fseek(fp,0,SEEK_SET);
+	fwrite(&totalPage,sizeof(int),1,fp);
+	fwrite(&totalRecord,sizeof(int),1,fp);
+	fwrite(&Deletd_page,sizeof(int),1,fp);
+	fwrite(&Delted_record,sizeof(int),1,fp);
+
+	return ;
+}
+int Get_HeaderRecord(FILE * fp, int* totalPage, int* totalRecord, int *Deletd_page, int *Delted_record){
+	fseek(fp, 0, SEEK_SET);
+	if (fread(totalPage, sizeof(int), 1, fp) < 0)
+		return -1;
+	if (fread(totalRecord, sizeof(int), 1, fp) < 0)
+		return -1;
+	if (fread(Deletd_page, sizeof(int), 1, fp) < 0)
+		return -1;
+	if (fread(Delted_record, sizeof(int), 1, fp) < 0)
+		return -1;
+
+	return 1;
+}
 //
 // 새로운 레코드를 저장하는 기능을 수행하며, 터미널로부터 입력받은 필드값들을 구조체에 저장한 후 아래 함수를 호출한다.
 //
 void add(FILE *fp, const Person *p)
 {
 	/*
-	 if deleted record exist, save the data that space first
-	 check the latest deleted record and right size(first fit). -> just check record len.
-	 if there's no space to save, save with append 
-	 if there's no space to save with append, allocate new page and save.
-	 when you save in deleted space, do internal fragmentation.
-	 -> new record length == deleted record size
-	 renew header area/record, notice that header record's #records is (nomal record + delted record)
 	 Examples of input file
 	 a.out a person.dat "999999" "GD HONG" "23" "Seoul" "02-08"
 	*/
-	
-
-	// Get RecordBuff from unpack()
-	char * recrdbuff = (char *) malloc(sizeof(char) * MAX_RECORD_SIZE);
-	unpack(recrdbuff,p);
-	
-
-	if( RECORD_NUM == -1 && PAGE_NUM == -1){
-		// Deleted Record doesn't exist
-
+	int HEAD_RECORD_Allpage = 0;
+	int HEAD_RECORD_Allrecrd = 0;
+	int HEAD_RECORD_Del_page = -1;
+	int HEAD_RECORD_Del_recrd = -1;
+	Get_HeaderRecord(fp, &HEAD_RECORD_Allpage, &HEAD_RECORD_Allrecrd, &HEAD_RECORD_Del_page, &HEAD_RECORD_Del_recrd);
+	if (HEAD_RECORD_Allrecrd == 0 && HEAD_RECORD_Allpage == 0)
+	{
+		// Init
+		fseek(fp, 0, SEEK_SET);
+	//	HEAD_RECORD_Allpage = ;
+		if (fwrite(&HEAD_RECORD_Allpage, sizeof(int), 1, fp) < 0)
+		{
+			perror("Init fwrite");
+			exit(1);
+		}
+		if (fwrite(&HEAD_RECORD_Allrecrd, sizeof(int), 1, fp) < 0)
+		{
+			perror("Init fwrite");
+			exit(1);
+		}
+		if (fwrite(&HEAD_RECORD_Del_page, sizeof(int), 1, fp) < 0)
+		{
+			perror("Init fwrite");
+			exit(1);
+		}
+		if (fwrite(&HEAD_RECORD_Del_recrd, sizeof(int), 1, fp) < 0)
+		{
+			perror("Init fwrite");
+			exit(1);
+		}
 	}
-	else{
+	// Get RecordBuff from unpack()
+	int LIMIT_RECORD_NUM_IN_PAGE = (HEADER_AREA_SIZE - 4) / 8;
+	char *recrdbuff = (char *)malloc(sizeof(char) * (MAX_RECORD_SIZE + 8));
+	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
+	unpack(recrdbuff, (Person *)p);
+
+	if (HEAD_RECORD_Del_page == -1 && HEAD_RECORD_Del_recrd == -1)
+	{
+		#ifdef DEBUG
+		printf("> Deleted Record doesn't exist\n");
+		#endif
+		
+		// Deleted Record doesn't exist
+		
+		int cur_page = HEAD_RECORD_Allpage;
+		printf("cur_page : %d\n",cur_page);
+		readPage(fp,pagebuff,cur_page);
+		/* Save the data at the end of Data page */
+
+		// Update Header Area
+		int total_record_num = 0;
+		int cur_record_offset = -1;
+		int cur_record_len = -1;
+		memcpy(&total_record_num, pagebuff, 4);
+
+		int pre_record_offset = -1;
+		int pre_record_len = -1;
+		// Move to pre record
+		memcpy(&pre_record_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*(total_record_num-1), 4);
+		memcpy(&pre_record_len, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*(total_record_num-1) + HEADER_AREA_offset_SIZE, 4);
+		int Available_Data_size = DATA_AREA_SIZE - (pre_record_offset + pre_record_len);
+#ifdef DEBUG
+		printf("\ttotal_record_num : %d\n", total_record_num);
+		printf("\tLIMIT_RECORD_NUM : %d\n", LIMIT_RECORD_NUM_IN_PAGE);
+		printf("\trecrdbuff : %s\n", recrdbuff);
+		printf("\tstrlen(recrdbuff) : %ld\n", strlen(recrdbuff));
+		printf("\tAvailable_data_size : %d\n", Available_Data_size);
+#endif
+		/*
+			checking whether it is possible to insert new record in data area
+		*/
+		if (total_record_num < LIMIT_RECORD_NUM_IN_PAGE && strlen(recrdbuff) < Available_Data_size)
+		{
+
+			// Case - availalbe in page
+			// Write Data in this page.
+			int cur_record_num = total_record_num;
+			total_record_num++;
+			cur_record_offset = pre_record_len + pre_record_offset;
+			cur_record_len = strlen(recrdbuff);
+			
+			// Update HeaderArea
+			memcpy(pagebuff,&total_record_num,4);
+			memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record_num,&cur_record_offset,4);
+			memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record_num + HEADER_AREA_offset_SIZE,&cur_record_len,4);
+
+			
+#ifdef DEBUG
+			printf("\t\tcase - available in page\n");
+			printf("\t\tcur_record_offset : %d\n",cur_record_offset);
+			printf("\t\tcur_record_len : %d\n",cur_record_len);
+			printf("\t\tpre_record_offset : %d\n",pre_record_offset);
+			printf("\t\tpre_record_len : %d\n",pre_record_offset);
+
+
+#endif
+			// Update HeaderRecord
+			HEAD_RECORD_Allrecrd++;
+			Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
+
+			// Write Data
+			strcpy(pagebuff + HEADER_AREA_SIZE + cur_record_offset, recrdbuff);
+			writePage(fp,pagebuff,cur_page);
+		}
+		else
+		{
+		#ifdef DEBUG
+		printf("\t\tcase - Making new page\n");
+		#endif
+			// Case - Make new page
+			Making_newPage(fp,recrdbuff);
+		}
+	}
+	else
+	{
+			#ifdef DEBUG
+		printf("> Deleted Record does exist\n");
+		printf("\t\tcase - Making new page\n");
+		#endif
 		// Deleted Record exist
-
-		// Moved to deleted record that indicated in HEADER RECORD and Check the size. 
-		if( strlen(recrdbuff) > Get_rightsize(fp,PAGE_NUM,RECORD_NUM)) {
-			// Update Head_AREA (#records, record offset, record length)
-
-			// Update TOTAL_RECORD_NUM in HeadRecord
-
-			// Update PAGE_NUM && RECORD_NUM in HeadRecord
-
-
-
-		}
-		else{
-			/* Find deleted record that fits in */
-			int temp_pagenum = PAGE_NUM;
-			int temp_recordnum = RECORD_NUM;
-			while(strlen(recrdbuff) > Get_rightsize(fp,temp_pagenum,temp_recordnum)){
-				MoveToRecord(fp,temp_pagenum,Get_record_offset(fp,temp_pagenum,temp_recordnum));
-				fread(&temp_pagenum,sizeof(int),1,fp);
-				fread(&temp_recordnum,sizeof(int),1,fp);
-
-
-				if( temp_pagenum == -1 && temp_recordnum == -1){
-					// Make New page and Save the data.
-
-
-
-
-					break;
-				} 
+		int data_len = strlen(recrdbuff);
+		int next_page = -1;
+		int next_record = -1;
+		int cur_page = HEAD_RECORD_Del_page;
+		int cur_record = HEAD_RECORD_Del_recrd;
+		int offset;
+		int len;
+		readPage(fp,pagebuff,cur_page);
+		while(1){
+			if(cur_page == -1 && cur_record == -1){
+				Making_newPage(fp,recrdbuff);
+				break;
 			}
-		}
+			// Get information
+			memcpy(&offset, pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record , 4);
+			memcpy(&len, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * cur_record + HEADER_AREA_offset_SIZE, 4);
+			if (len >= data_len)
+			{
+				// Get pre_deleted data
+				int pre_page, pre_record;
+				memcpy(&pre_page, pagebuff + HEADER_AREA_SIZE + len + 1, 4);
+				memcpy(&pre_record, pagebuff + HEADER_AREA_SIZE + len + 5, 4);
 
-		// forwarding next deleted record
+				// Update Data
+				strcpy(pagebuff + HEADER_AREA_SIZE + len, recrdbuff);
+
+				// Update Metadata
+				if (next_page == -1 && next_record == -1)
+				{
+
+					HEAD_RECORD_Del_page = pre_page;
+					HEAD_RECORD_Del_recrd = pre_record;
+					Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
+				}
+				else 
+				{
+					char *temp_page_buff = (char *)malloc(sizeof(char) * PAGE_SIZE);
+					readPage(fp, temp_page_buff, next_page);
+					int next_offset;
+					memcpy(&next_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * next_record, 4);
+					/*
+						before Situation.
+							next_deleted -> cur_deleted -> pre_deleted 
+						After Situation.
+							next_deleted -> pre_deleted
+							cur_deleted : Not deleted!!!
+					*/
+					memset(temp_page_buff + HEADER_AREA_SIZE + next_offset, '*', 1);
+					memset(temp_page_buff + HEADER_AREA_SIZE + next_offset + 1, pre_page, 4);
+					memset(temp_page_buff + HEADER_AREA_SIZE + next_offset + 5, pre_record, 4);
+					writePage(fp, temp_page_buff, next_page);
+				}
+				return;
+			}
+
+			// Update cur/next page & record
+			next_page = cur_page;
+			next_record = cur_record;
+			memcpy(&cur_page,pagebuff+HEADER_AREA_SIZE+offset+1,4);
+			memcpy(&cur_record,pagebuff+HEADER_AREA_SIZE+offset+5,4);
+		}
 	}
 }
+void Making_newPage(FILE *fp , char * databuff){
+	#ifdef DEBUG
+	printf("======================MAKING_NEWPAGE===================\n");
+	#endif
+	int HEAD_RECORD_Allpage = -1;
+	int HEAD_RECORD_Allrecrd = -1;
+	int HEAD_RECORD_Del_page = -1;
+	int HEAD_RECORD_Del_recrd = -1;
+	Get_HeaderRecord(fp,&HEAD_RECORD_Allpage,&HEAD_RECORD_Allrecrd,&HEAD_RECORD_Del_page,&HEAD_RECORD_Del_recrd);
 
+	char * pagebuff = (char *) malloc (sizeof(char) * PAGE_SIZE);	
+	int record_num;
+	int cur_record_offset;
+	int cur_record_len;
+
+	record_num = 1;
+	cur_record_offset = 0;
+	cur_record_len = strlen(databuff);
+	
+	// Update Record Area 
+	memcpy(pagebuff,&record_num,4);
+	memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE,&cur_record_offset,4);
+	memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+HEADER_AREA_offset_SIZE,&cur_record_len,4);
+
+	// Update Header Record
+	HEAD_RECORD_Allpage++;
+	HEAD_RECORD_Allrecrd++;
+	int cur_page = HEAD_RECORD_Allpage;
+	Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
+	#ifdef DEBUG
+	printf("Allpage : %d\n",HEAD_RECORD_Allpage);
+	printf("Allrecrd : %d\n",HEAD_RECORD_Allrecrd);
+	printf("Del_page : %d\n",HEAD_RECORD_Del_page);
+	printf("Del_recrd : %d\n",HEAD_RECORD_Del_recrd);
+	printf("======================MAKING_NEWPAGE_END===============\n");
+
+	#endif
+	// Write Data
+	strcpy(pagebuff + HEADER_AREA_SIZE + cur_record_offset, databuff);
+	writePage(fp, pagebuff, cur_page);
+
+}
 //
 // 주민번호와 일치하는 레코드를 찾아서 삭제하는 기능을 수행한다.
 //
-void MoveToRecord(FILE * fp , int pagenum, int offset){
-	fseek( fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum + offset,SEEK_SET);
-}
-int Get_record_offset(FILE * fp, int pagenum, int recordnum){
-	fseek(fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum);
-	fseek(fp,HEADER_AREA_totalrecord+(HEADER_AREA_offset+HEADER_AREA_length)*recordnum ,SEEK_CUR);
-	int temp;
-	fread(&temp,sizeof(int),1,fp);
-	return temp;
-}
-int Get_rightsize(FILE *fp , int pagenum , int recordnum){
-	fseek(fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum);
-	fseek(fp,HEADER_AREA_totalrecord+(HEADER_AREA_offset+HEADER_AREA_length)*recordnum + HEADER_AREA_offset,SEEK_CUR);
-
-	int area_len = 0;
-	fread(&area_len,sizeof(int),1,fp);
-
-	return area_len;
-}
 void delete(FILE *fp, const char *id)
 {
 }
@@ -281,14 +463,26 @@ void delete(FILE *fp, const char *id)
 int main(int argc, char *argv[])
 {
 	FILE *fp;  // 레코드 파일의 파일 포인터
-	
-	Person p ={
-		"20172612","yimo22","99","suwon","010","test@naver.com"
+	fp = fopen("test.dat","w+");
+	if(fp == NULL){
+		perror("fopen");
+		exit(1);
+	}
+	Person p1 ={
+		"20172600","yimo22","99","suwon","010","test@naver.com"
 	};
-	char * rdbuff = (char *) malloc (sizeof(char) * MAX_RECORD_SIZE);
-	pack(rdbuff,&p);
-	Person pq;
-	unpack(rdbuff,&pq);
-
+	Person p2 ={
+		"20172610","yimo22","99","suwon","010","test@naver.com"
+	};
+	Person p3 ={
+		"20172620","yimo22","99","suwon","010","test@naver.com"
+	};
+	Person p4 ={
+		"20172630","yimo22","99","suwon","010","test@naver.com"
+	};
+	add(fp,&p1);
+	add(fp,&p2);
+	add(fp,&p3);
+	add(fp,&p4);
 	return 1;
 }
