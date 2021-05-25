@@ -2,210 +2,118 @@
 #include <string.h>
 #include <stdlib.h>
 #include "person.h"
-//ÇÊ¿äÇÑ °æ¿ì Çì´õ ÆÄÀÏ°ú ÇÔ¼ö¸¦ Ãß°¡ÇÒ ¼ö ÀÖÀ½
+//í•„ìš”í•œ ê²½ìš° í—¤ë” íŒŒì¼ê³¼ í•¨ìˆ˜ë¥¼ ì¶”ê°€í•  ìˆ˜ ìˆìŒ
 
 #define DEBUG 1
 #define HEADER_AREA_totalrecord_SIZE 4
 #define HEADER_AREA_offset_SIZE 4
 #define HEADER_AREA_length_SIZE 4
+#define HEADER_AREA_RECORDMETADATA_SIZE 8
 
-void Making_newPage(FILE *fp , char * databuff);
-
+void Making_newPage(FILE *fp, char *databuff);
+void PrintAllData(FILE * fp);
 /* This is for RECORD FILE */
 const int HEADER_RECORD_SIZE = 16;
 
-// °úÁ¦ ¼³¸í¼­´ë·Î ±¸ÇöÇÏ´Â ¹æ½ÄÀº °¢ÀÚ ´Ù¸¦ ¼ö ÀÖÁö¸¸ ¾à°£ÀÇ Á¦¾àÀ» µÓ´Ï´Ù.
-// ·¹ÄÚµå ÆÄÀÏÀÌ ÆäÀÌÁö ´ÜÀ§·Î ÀúÀå °ü¸®µÇ±â ¶§¹®¿¡ »ç¿ëÀÚ ÇÁ·Î±×·¥¿¡¼­ ·¹ÄÚµå ÆÄÀÏ·ÎºÎÅÍ µ¥ÀÌÅÍ¸¦ ÀĞ°í ¾µ ¶§µµ
-// ÆäÀÌÁö ´ÜÀ§¸¦ »ç¿ëÇÕ´Ï´Ù. µû¶ó¼­ ¾Æ·¡ÀÇ µÎ ÇÔ¼ö°¡ ÇÊ¿äÇÕ´Ï´Ù.
-// 1. readPage(): ÁÖ¾îÁø ÆäÀÌÁö ¹øÈ£ÀÇ ÆäÀÌÁö µ¥ÀÌÅÍ¸¦ ÇÁ·Î±×·¥ »óÀ¸·Î ÀĞ¾î¿Í¼­ pagebuf¿¡ ÀúÀåÇÑ´Ù
-// 2. writePage(): ÇÁ·Î±×·¥ »óÀÇ pagebufÀÇ µ¥ÀÌÅÍ¸¦ ÁÖ¾îÁø ÆäÀÌÁö ¹øÈ£¿¡ ÀúÀåÇÑ´Ù
-// ·¹ÄÚµå ÆÄÀÏ¿¡¼­ ±âÁ¸ÀÇ ·¹ÄÚµå¸¦ ÀĞ°Å³ª »õ·Î¿î ·¹ÄÚµå¸¦ ¾²°Å³ª »èÁ¦ ·¹ÄÚµå¸¦ ¼öÁ¤ÇÒ ¶§³ª
-// À§ÀÇ readPage() ÇÔ¼ö¸¦ È£ÃâÇÏ¿© pagebuf¿¡ ÀúÀåÇÑ ÈÄ, ¿©±â¿¡ ÇÊ¿ä¿¡ µû¶ó¼­ »õ·Î¿î ·¹ÄÚµå¸¦ ÀúÀåÇÏ°Å³ª
-// »èÁ¦ ·¹ÄÚµå °ü¸®¸¦ À§ÇÑ ¸ŞÅ¸µ¥ÀÌÅÍ¸¦ ÀúÀåÇÕ´Ï´Ù. ±×¸®°í ³­ ÈÄ writePage() ÇÔ¼ö¸¦ È£ÃâÇÏ¿© ¼öÁ¤µÈ pagebuf¸¦
-// ·¹ÄÚµå ÆÄÀÏ¿¡ ÀúÀåÇÕ´Ï´Ù. ¹İµå½Ã ÆäÀÌÁö ´ÜÀ§·Î ÀĞ°Å³ª ½á¾ß ÇÕ´Ï´Ù.
+// ê³¼ì œ ì„¤ëª…ì„œëŒ€ë¡œ êµ¬í˜„í•˜ëŠ” ë°©ì‹ì€ ê°ì ë‹¤ë¥¼ ìˆ˜ ìˆì§€ë§Œ ì•½ê°„ì˜ ì œì•½ì„ ë‘¡ë‹ˆë‹¤.
+// ë ˆì½”ë“œ íŒŒì¼ì´ í˜ì´ì§€ ë‹¨ìœ„ë¡œ ì €ì¥ ê´€ë¦¬ë˜ê¸° ë•Œë¬¸ì— ì‚¬ìš©ì í”„ë¡œê·¸ë¨ì—ì„œ ë ˆì½”ë“œ íŒŒì¼ë¡œë¶€í„° ë°ì´í„°ë¥¼ ì½ê³  ì“¸ ë•Œë„
+// í˜ì´ì§€ ë‹¨ìœ„ë¥¼ ì‚¬ìš©í•©ë‹ˆë‹¤. ë”°ë¼ì„œ ì•„ë˜ì˜ ë‘ í•¨ìˆ˜ê°€ í•„ìš”í•©ë‹ˆë‹¤.
+// 1. readPage(): ì£¼ì–´ì§„ í˜ì´ì§€ ë²ˆí˜¸ì˜ í˜ì´ì§€ ë°ì´í„°ë¥¼ í”„ë¡œê·¸ë¨ ìƒìœ¼ë¡œ ì½ì–´ì™€ì„œ pagebufì— ì €ì¥í•œë‹¤
+// 2. writePage(): í”„ë¡œê·¸ë¨ ìƒì˜ pagebufì˜ ë°ì´í„°ë¥¼ ì£¼ì–´ì§„ í˜ì´ì§€ ë²ˆí˜¸ì— ì €ì¥í•œë‹¤
+// ë ˆì½”ë“œ íŒŒì¼ì—ì„œ ê¸°ì¡´ì˜ ë ˆì½”ë“œë¥¼ ì½ê±°ë‚˜ ìƒˆë¡œìš´ ë ˆì½”ë“œë¥¼ ì“°ê±°ë‚˜ ì‚­ì œ ë ˆì½”ë“œë¥¼ ìˆ˜ì •í•  ë•Œë‚˜
+// ìœ„ì˜ readPage() í•¨ìˆ˜ë¥¼ í˜¸ì¶œí•˜ì—¬ pagebufì— ì €ì¥í•œ í›„, ì—¬ê¸°ì— í•„ìš”ì— ë”°ë¼ì„œ ìƒˆë¡œìš´ ë ˆì½”ë“œë¥¼ ì €ì¥í•˜ê±°ë‚˜
+// ì‚­ì œ ë ˆì½”ë“œ ê´€ë¦¬ë¥¼ ìœ„í•œ ë©”íƒ€ë°ì´í„°ë¥¼ ì €ì¥í•©ë‹ˆë‹¤. ê·¸ë¦¬ê³  ë‚œ í›„ writePage() í•¨ìˆ˜ë¥¼ í˜¸ì¶œí•˜ì—¬ ìˆ˜ì •ëœ pagebufë¥¼
+// ë ˆì½”ë“œ íŒŒì¼ì— ì €ì¥í•©ë‹ˆë‹¤. ë°˜ë“œì‹œ í˜ì´ì§€ ë‹¨ìœ„ë¡œ ì½ê±°ë‚˜ ì¨ì•¼ í•©ë‹ˆë‹¤.
 //
-// ÁÖÀÇ: µ¥ÀÌÅÍ ÆäÀÌÁö·ÎºÎÅÍ ·¹ÄÚµå(»èÁ¦ ·¹ÄÚµå Æ÷ÇÔ)¸¦ ÀĞ°Å³ª ¾µ ¶§ ÆäÀÌÁö ´ÜÀ§·Î I/O¸¦ Ã³¸®ÇØ¾ß ÇÏÁö¸¸,
-// Çì´õ ·¹ÄÚµåÀÇ ¸ŞÅ¸µ¥ÀÌÅÍ¸¦ ÀúÀåÇÏ°Å³ª ¼öÁ¤ÇÏ´Â °æ¿ì ÆäÀÌÁö ´ÜÀ§·Î Ã³¸®ÇÏÁö ¾Ê°í Á÷Á¢ ·¹ÄÚµå ÆÄÀÏÀ» Á¢±ÙÇØ¼­ Ã³¸®ÇÑ´Ù.
+// ì£¼ì˜: ë°ì´í„° í˜ì´ì§€ë¡œë¶€í„° ë ˆì½”ë“œ(ì‚­ì œ ë ˆì½”ë“œ í¬í•¨)ë¥¼ ì½ê±°ë‚˜ ì“¸ ë•Œ í˜ì´ì§€ ë‹¨ìœ„ë¡œ I/Oë¥¼ ì²˜ë¦¬í•´ì•¼ í•˜ì§€ë§Œ,
+// í—¤ë” ë ˆì½”ë“œì˜ ë©”íƒ€ë°ì´í„°ë¥¼ ì €ì¥í•˜ê±°ë‚˜ ìˆ˜ì •í•˜ëŠ” ê²½ìš° í˜ì´ì§€ ë‹¨ìœ„ë¡œ ì²˜ë¦¬í•˜ì§€ ì•Šê³  ì§ì ‘ ë ˆì½”ë“œ íŒŒì¼ì„ ì ‘ê·¼í•´ì„œ ì²˜ë¦¬í•œë‹¤.
 
 //
-// ÆäÀÌÁö ¹øÈ£¿¡ ÇØ´çÇÏ´Â ÆäÀÌÁö¸¦ ÁÖ¾îÁø ÆäÀÌÁö ¹öÆÛ¿¡ ÀĞ¾î¼­ ÀúÀåÇÑ´Ù. ÆäÀÌÁö ¹öÆÛ´Â ¹İµå½Ã ÆäÀÌÁö Å©±â¿Í ÀÏÄ¡ÇØ¾ß ÇÑ´Ù.
+// í˜ì´ì§€ ë²ˆí˜¸ì— í•´ë‹¹í•˜ëŠ” í˜ì´ì§€ë¥¼ ì£¼ì–´ì§„ í˜ì´ì§€ ë²„í¼ì— ì½ì–´ì„œ ì €ì¥í•œë‹¤. í˜ì´ì§€ ë²„í¼ëŠ” ë°˜ë“œì‹œ í˜ì´ì§€ í¬ê¸°ì™€ ì¼ì¹˜í•´ì•¼ í•œë‹¤.
 //
+
 void readPage(FILE *fp, char *pagebuf, int pagenum)
 {
 	/* Get the page that indicated pagenum to pagebuf */
-	
-
-	if( fp == NULL){
-		fprintf(stderr, "Error - Unexpeted File\n");
+	fseek(fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum, SEEK_SET);
+	// Read
+	if (fread(pagebuf, sizeof(char), PAGE_SIZE, fp) < 0)
+	{
+		fprintf(stderr, "error - fread(pagebuf)\n");
 		exit(1);
 	}
-	/*
-		Argument check from HEADER RECORD
-		- whether indicated page is deleted
-	*/
-
-	/*
-	if(fread(&TOTAL_PAGE_NUM,sizeof(int),1,fp) < 0){
-		fprintf(stderr,"error - fread(TOTAL_PAGE_NUM\n");
-		exit(1);
-	}
-	if(fread(&TOTAL_RECORD_NUM,sizeof(int),1,fp) < 0){
-		fprintf(stderr,"error - fread(TOTAL_RECORD_NUM\n");
-		exit(1);
-	}
-	if(fread(&PAGE_NUM,sizeof(int),1,fp) < 0){
-		fprintf(stderr,"error - fread(PAGE_NUM\n");
-		exit(1);
-	}
-	if(fread(&RECORD_NUM,sizeof(int),1,fp) < 0){
-		fprintf(stderr,"error - fread(RECORD_NUM\n");
-		exit(1);
-	}
-	if( TOTAL_PAGE_NUM < pagenum){
-		fprintf(stderr,"error - pagenum(readPage)\n");
-		exit(1);
-	}
-	// mv FILE seek point
-
-	*/
-	fseek(fp, HEADER_RECORD_SIZE + PAGE_SIZE * pagenum,SEEK_SET);
-	// Read 
-	if(fread(pagebuf,sizeof(char),PAGE_SIZE,fp) < 0){
-		fprintf(stderr,"error - fread(pagebuf)\n");
-		exit(1);
-	}
-	return ;
+	return;
 }
 
 //
-// ÆäÀÌÁö ¹öÆÛÀÇ µ¥ÀÌÅÍ¸¦ ÁÖ¾îÁø ÆäÀÌÁö ¹øÈ£¿¡ ÇØ´çÇÏ´Â ·¹ÄÚµå ÆÄÀÏÀÇ À§Ä¡¿¡ ÀúÀåÇÑ´Ù. 
-// ÆäÀÌÁö ¹öÆÛ´Â ¹İµå½Ã ÆäÀÌÁö Å©±â¿Í ÀÏÄ¡ÇØ¾ß ÇÑ´Ù.
+// í˜ì´ì§€ ë²„í¼ì˜ ë°ì´í„°ë¥¼ ì£¼ì–´ì§„ í˜ì´ì§€ ë²ˆí˜¸ì— í•´ë‹¹í•˜ëŠ” ë ˆì½”ë“œ íŒŒì¼ì˜ ìœ„ì¹˜ì— ì €ì¥í•œë‹¤.
+// í˜ì´ì§€ ë²„í¼ëŠ” ë°˜ë“œì‹œ í˜ì´ì§€ í¬ê¸°ì™€ ì¼ì¹˜í•´ì•¼ í•œë‹¤.
 //
 void writePage(FILE *fp, const char *pagebuf, int pagenum)
 {
-	// Write Pagebuf
-	#ifdef DEBUG
-		printf("\tMoving to pagenum : %d\n",pagenum);
-		fseek(fp,0,SEEK_END);
-		int b_filesize = ftell(fp);
-		printf("\tbefore file size : %d\n",b_filesize);
-	#endif
-	fseek(fp,pagenum * PAGE_SIZE + HEADER_RECORD_SIZE,SEEK_SET);
-	fwrite(pagebuf,sizeof(char),PAGE_SIZE,fp);
-	#ifdef DEBUG
-		fseek(fp,0,SEEK_END);
-		int af_filesize = ftell(fp);
-		printf("\tafter file size : %d\n",af_filesize);
-	#endif
+// Write Pagebuf
+#ifdef DEBUG
+	printf("\tMoving to pagenum : %d\n", pagenum);
+	fseek(fp, 0, SEEK_END);
+	int b_filesize = ftell(fp);
+	printf("\tbefore file size : %d\n", b_filesize);
+#endif
+	fseek(fp, pagenum * PAGE_SIZE + HEADER_RECORD_SIZE, SEEK_SET);
+	if (fwrite(pagebuf, sizeof(char), PAGE_SIZE, fp) < 0)
+	{
+		fprintf(stderr, "error - fwrite(writePage)");
+		exit(1);
+	}
+#ifdef DEBUG
+	fseek(fp, 0, SEEK_END);
+	int af_filesize = ftell(fp);
+	printf("\tafter file size : %d\n", af_filesize);
+#endif
 }
 
 //
-// »õ·Î¿î ·¹ÄÚµå¸¦ ÀúÀåÇÒ ¶§ ÅÍ¹Ì³Î·ÎºÎÅÍ ÀÔ·Â¹ŞÀº Á¤º¸¸¦ Person ±¸Á¶Ã¼¿¡ ¸ÕÀú ÀúÀåÇÏ°í, pack() ÇÔ¼ö¸¦ »ç¿ëÇÏ¿©
-// ·¹ÄÚµå ÆÄÀÏ¿¡ ÀúÀåÇÒ ·¹ÄÚµå ÇüÅÂ¸¦ recordbuf¿¡ ¸¸µç´Ù. 
+// ìƒˆë¡œìš´ ë ˆì½”ë“œë¥¼ ì €ì¥í•  ë•Œ í„°ë¯¸ë„ë¡œë¶€í„° ì…ë ¥ë°›ì€ ì •ë³´ë¥¼ Person êµ¬ì¡°ì²´ì— ë¨¼ì € ì €ì¥í•˜ê³ , pack() í•¨ìˆ˜ë¥¼ ì‚¬ìš©í•˜ì—¬
+// ë ˆì½”ë“œ íŒŒì¼ì— ì €ì¥í•  ë ˆì½”ë“œ í˜•íƒœë¥¼ recordbufì— ë§Œë“ ë‹¤.
 //
 void pack(char *recordbuf, const Person *p)
 {
-	char Delimiter = '#';
-	char *Record_form = (char *)malloc(sizeof(char) * MAX_RECORD_SIZE);
-	memset(Record_form, MAX_RECORD_SIZE, 0);
-	printf("<<pack>> %s \n", Record_form);
-	if (p->id != NULL)
-	{
-		strcat(Record_form, p->id);
-		strcat(Record_form, "#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	if (p->name != NULL)
-	{
-		strcat(Record_form, p->name);
-		strcat(Record_form, "#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	if (p->age != NULL)
-	{
-		strcat(Record_form, p->age);
-		strcat(Record_form, "#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	if (p->addr != NULL)
-	{
-		strcat(Record_form, p->addr);
-		strcat(Record_form, "#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	if (p->phone != NULL)
-	{
-		strcat(Record_form, p->phone);
-		strcat(Record_form, "#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	if (p->email != NULL)
-	{
-		strcat(Record_form, p->email);
-		strcat(Record_form,"#");
-#ifdef DEBUG
-		printf("<<pack>> %s \n", Record_form);
-#endif
-	}
-	strcpy(recordbuf,Record_form);
-	free(Record_form);
+	sprintf(recordbuf, "%s#%s#%s#%s#%s#%s#", p->id, p->name, p->age, p->addr, p->phone, p->email);
+	return;
 }
-
-// 
-// ¾Æ·¡ÀÇ unpack() ÇÔ¼ö´Â recordbuf¿¡ ÀúÀåµÇ¾î ÀÖ´Â ·¹ÄÚµå¸¦ ±¸Á¶Ã¼·Î º¯È¯ÇÒ ¶§ »ç¿ëÇÑ´Ù.
+//
+// ì•„ë˜ì˜ unpack() í•¨ìˆ˜ëŠ” recordbufì— ì €ì¥ë˜ì–´ ìˆëŠ” ë ˆì½”ë“œë¥¼ êµ¬ì¡°ì²´ë¡œ ë³€í™˜í•  ë•Œ ì‚¬ìš©í•œë‹¤.
 //
 void unpack(char *recordbuf, Person *p)
 {
-	sprintf(recordbuf,"%s#%s#%s#%s#%s#%s#",p->id,p->name,p->age,p->addr,p->phone,p->email);
-	return ;
+	char *ptr;
+	ptr = strtok(recordbuf, "#");
+	strcpy(p->id, ptr);
+	strtok(NULL, " ");
+	strcpy(p->name, ptr);
+	strtok(NULL, " ");
+	strcpy(p->age, ptr);
+	strtok(NULL, " ");
+	strcpy(p->addr, ptr);
+	strtok(NULL, " ");
+	strcpy(p->phone, ptr);
+	strtok(NULL, " ");
+	strcpy(p->email, ptr);
+
+	return;
 }
 
+void Update_HeaderRecord(FILE *fp, int totalPage, int totalRecord, int Deletd_page, int Delted_record)
+{
+	fseek(fp, 0, SEEK_SET);
+	fwrite(&totalPage, sizeof(int), 1, fp);
+	fwrite(&totalRecord, sizeof(int), 1, fp);
+	fwrite(&Deletd_page, sizeof(int), 1, fp);
+	fwrite(&Delted_record, sizeof(int), 1, fp);
 
-int Get_Datapage_FROM_HEADRECORD(FILE * fp){
-	fseek(fp,0,SEEK_SET);
-	int temp;
-	fread(&temp,sizeof(int),1,fp);
-	return temp;
+	return;
 }
-int Get_Allrecord_FROM_HEADRECORD(FILE * fp){
-	fseek(fp,4,SEEK_SET);
-	int temp;
-	fread(&temp,sizeof(int),1,fp);
-	return temp;
-}
-int Get_Deleted_page_FROM_HEADRECORD(FILE * fp){
-	fseek(fp,8,SEEK_SET);
-	int temp;
-	fread(&temp,sizeof(int),1,fp);
-	return temp;
-}
-int Get_Deleted_record_FROM_HEADRECORD(FILE * fp){
-	fseek(fp,12,SEEK_SET);
-	int temp;
-	fread(&temp,sizeof(int),1,fp);
-	return temp;
-}
-
-void Update_HeaderRecord(FILE * fp, int totalPage, int totalRecord, int Deletd_page, int Delted_record){
-	fseek(fp,0,SEEK_SET);
-	fwrite(&totalPage,sizeof(int),1,fp);
-	fwrite(&totalRecord,sizeof(int),1,fp);
-	fwrite(&Deletd_page,sizeof(int),1,fp);
-	fwrite(&Delted_record,sizeof(int),1,fp);
-
-	return ;
-}
-int Get_HeaderRecord(FILE * fp, int* totalPage, int* totalRecord, int *Deletd_page, int *Delted_record){
+int Get_HeaderRecord(FILE *fp, int *totalPage, int *totalRecord, int *Deletd_page, int *Delted_record)
+{
 	fseek(fp, 0, SEEK_SET);
 	if (fread(totalPage, sizeof(int), 1, fp) < 0)
 		return -1;
@@ -219,14 +127,10 @@ int Get_HeaderRecord(FILE * fp, int* totalPage, int* totalRecord, int *Deletd_pa
 	return 1;
 }
 //
-// »õ·Î¿î ·¹ÄÚµå¸¦ ÀúÀåÇÏ´Â ±â´ÉÀ» ¼öÇàÇÏ¸ç, ÅÍ¹Ì³Î·ÎºÎÅÍ ÀÔ·Â¹ŞÀº ÇÊµå°ªµéÀ» ±¸Á¶Ã¼¿¡ ÀúÀåÇÑ ÈÄ ¾Æ·¡ ÇÔ¼ö¸¦ È£ÃâÇÑ´Ù.
+// ìƒˆë¡œìš´ ë ˆì½”ë“œë¥¼ ì €ì¥í•˜ëŠ” ê¸°ëŠ¥ì„ ìˆ˜í–‰í•˜ë©°, í„°ë¯¸ë„ë¡œë¶€í„° ì…ë ¥ë°›ì€ í•„ë“œê°’ë“¤ì„ êµ¬ì¡°ì²´ì— ì €ì¥í•œ í›„ ì•„ë˜ í•¨ìˆ˜ë¥¼ í˜¸ì¶œí•œë‹¤.
 //
 void add(FILE *fp, const Person *p)
 {
-	/*
-	 Examples of input file
-	 a.out a person.dat "999999" "GD HONG" "23" "Seoul" "02-08"
-	*/
 	int HEAD_RECORD_Allpage = 0;
 	int HEAD_RECORD_Allrecrd = 0;
 	int HEAD_RECORD_Del_page = -1;
@@ -236,7 +140,7 @@ void add(FILE *fp, const Person *p)
 	{
 		// Init
 		fseek(fp, 0, SEEK_SET);
-	//	HEAD_RECORD_Allpage = ;
+		HEAD_RECORD_Allpage = 1;
 		if (fwrite(&HEAD_RECORD_Allpage, sizeof(int), 1, fp) < 0)
 		{
 			perror("Init fwrite");
@@ -262,19 +166,17 @@ void add(FILE *fp, const Person *p)
 	int LIMIT_RECORD_NUM_IN_PAGE = (HEADER_AREA_SIZE - 4) / 8;
 	char *recrdbuff = (char *)malloc(sizeof(char) * (MAX_RECORD_SIZE + 8));
 	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
-	unpack(recrdbuff, (Person *)p);
+	pack(recrdbuff, (Person *)p);
 
 	if (HEAD_RECORD_Del_page == -1 && HEAD_RECORD_Del_recrd == -1)
 	{
-		#ifdef DEBUG
+#ifdef DEBUG
 		printf("> Deleted Record doesn't exist\n");
-		#endif
-		
+#endif
 		// Deleted Record doesn't exist
-		
-		int cur_page = HEAD_RECORD_Allpage;
-		printf("cur_page : %d\n",cur_page);
-		readPage(fp,pagebuff,cur_page);
+		int cur_page = HEAD_RECORD_Allpage - 1;
+		printf("cur_page : %d\n", cur_page);
+		readPage(fp, pagebuff, cur_page);
 		/* Save the data at the end of Data page */
 
 		// Update Header Area
@@ -286,43 +188,43 @@ void add(FILE *fp, const Person *p)
 		int pre_record_offset = -1;
 		int pre_record_len = -1;
 		// Move to pre record
-		memcpy(&pre_record_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*(total_record_num-1), 4);
-		memcpy(&pre_record_len, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*(total_record_num-1) + HEADER_AREA_offset_SIZE, 4);
+		memcpy(&pre_record_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * (total_record_num - 1), 4);
+		memcpy(&pre_record_len, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * (total_record_num - 1) + HEADER_AREA_offset_SIZE, 4);
 		int Available_Data_size = DATA_AREA_SIZE - (pre_record_offset + pre_record_len);
-#ifdef DEBUG
-		printf("\ttotal_record_num : %d\n", total_record_num);
-		printf("\tLIMIT_RECORD_NUM : %d\n", LIMIT_RECORD_NUM_IN_PAGE);
-		printf("\trecrdbuff : %s\n", recrdbuff);
-		printf("\tstrlen(recrdbuff) : %ld\n", strlen(recrdbuff));
-		printf("\tAvailable_data_size : %d\n", Available_Data_size);
-#endif
+
 		/*
 			checking whether it is possible to insert new record in data area
 		*/
 		if (total_record_num < LIMIT_RECORD_NUM_IN_PAGE && strlen(recrdbuff) < Available_Data_size)
 		{
-
+#ifdef DEBUG
+			printf("-Case : Write in page\n");
+			printf("\ttotal_record_num : %d\n", total_record_num);
+			printf("\tLIMIT_RECORD_NUM : %d\n", LIMIT_RECORD_NUM_IN_PAGE);
+			printf("\tpre_record offset : %d\n", pre_record_offset);
+			printf("\tpre_record len : %d\n", pre_record_len);
+			printf("\trecrdbuff : %s\n", recrdbuff);
+			printf("\tstrlen(recrdbuff) : %ld\n", strlen(recrdbuff));
+			printf("\tAvailable_data_size : %d\n", Available_Data_size);
+#endif
 			// Case - availalbe in page
 			// Write Data in this page.
 			int cur_record_num = total_record_num;
 			total_record_num++;
 			cur_record_offset = pre_record_len + pre_record_offset;
 			cur_record_len = strlen(recrdbuff);
-			
-			// Update HeaderArea
-			memcpy(pagebuff,&total_record_num,4);
-			memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record_num,&cur_record_offset,4);
-			memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record_num + HEADER_AREA_offset_SIZE,&cur_record_len,4);
 
-			
+			// Update HeaderArea
+			memcpy(pagebuff, &total_record_num, 4);
+			memcpy(pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * cur_record_num, &cur_record_offset, 4);
+			memcpy(pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * cur_record_num + HEADER_AREA_offset_SIZE, &cur_record_len, 4);
+
 #ifdef DEBUG
 			printf("\t\tcase - available in page\n");
-			printf("\t\tcur_record_offset : %d\n",cur_record_offset);
-			printf("\t\tcur_record_len : %d\n",cur_record_len);
-			printf("\t\tpre_record_offset : %d\n",pre_record_offset);
-			printf("\t\tpre_record_len : %d\n",pre_record_offset);
-
-
+			printf("\t\tcur_record_offset : %d\n", cur_record_offset);
+			printf("\t\tcur_record_len : %d\n", cur_record_len);
+			printf("\t\tpre_record_offset : %d\n", pre_record_offset);
+			printf("\t\tpre_record_len : %d\n", pre_record_len);
 #endif
 			// Update HeaderRecord
 			HEAD_RECORD_Allrecrd++;
@@ -330,23 +232,29 @@ void add(FILE *fp, const Person *p)
 
 			// Write Data
 			strcpy(pagebuff + HEADER_AREA_SIZE + cur_record_offset, recrdbuff);
-			writePage(fp,pagebuff,cur_page);
+			writePage(fp, pagebuff, cur_page);
 		}
 		else
 		{
-		#ifdef DEBUG
-		printf("\t\tcase - Making new page\n");
-		#endif
+#ifdef DEBUG
+			printf("-Case : Make new page\n");
+			printf("\ttotal_record_num : %d\n", total_record_num);
+			printf("\tLIMIT_RECORD_NUM : %d\n", LIMIT_RECORD_NUM_IN_PAGE);
+			printf("\tpre_record offset : %d\n", pre_record_offset);
+			printf("\tpre_record len : %d\n", pre_record_len);
+			printf("\trecrdbuff : %s\n", recrdbuff);
+			printf("\tstrlen(recrdbuff) : %ld\n", strlen(recrdbuff));
+			printf("\tAvailable_data_size : %d\n", Available_Data_size);
+#endif
 			// Case - Make new page
-			Making_newPage(fp,recrdbuff);
+			Making_newPage(fp, recrdbuff);
 		}
 	}
 	else
 	{
-			#ifdef DEBUG
-		printf("> Deleted Record does exist\n");
-		printf("\t\tcase - Making new page\n");
-		#endif
+#ifdef DEBUG
+		printf("> Deleted Record exist\n");
+#endif
 		// Deleted Record exist
 		int data_len = strlen(recrdbuff);
 		int next_page = -1;
@@ -355,39 +263,85 @@ void add(FILE *fp, const Person *p)
 		int cur_record = HEAD_RECORD_Del_recrd;
 		int offset;
 		int len;
-		readPage(fp,pagebuff,cur_page);
-		while(1){
-			if(cur_page == -1 && cur_record == -1){
-				Making_newPage(fp,recrdbuff);
+		while (1)
+		{
+			readPage(fp, pagebuff, cur_page);
+#ifdef DEBUG
+			printf("===================loopstart===============\n");
+			printf("before return looping(updated)\n");
+			printf("offset : %d\n", offset);
+			printf("len : %d\n", len);
+			printf("next_page : %d\n", next_page);
+			printf("next_record : %d\n", next_record);
+			printf("cur_page : %d\n", cur_page);
+			printf("cur_record : %d\n", cur_record);
+#endif
+			if (cur_page == -1 && cur_record == -1)
+			{
+#ifdef DEBUG
+				printf("Case - Making New page\n");
+#endif
+				Making_newPage(fp, recrdbuff);
 				break;
 			}
+
+			int pre_page;
+			int pre_record;
 			// Get information
-			memcpy(&offset, pagebuff+HEADER_AREA_totalrecord_SIZE+(HEADER_AREA_offset_SIZE+HEADER_AREA_length_SIZE)*cur_record , 4);
+			memcpy(&offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * cur_record, 4);
 			memcpy(&len, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * cur_record + HEADER_AREA_offset_SIZE, 4);
+			memcpy(&pre_page, pagebuff + HEADER_AREA_SIZE + offset + 1, 4);
+			memcpy(&pre_record, pagebuff + HEADER_AREA_SIZE + offset + 5, 4);
+#ifdef DEBUG
+
+			printf("<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>>>>>>>>\n");
+			printf("offset : %d\n", offset);
+			printf("len : %d\n", len);
+			printf("data_len : %d\n",data_len);
+			if(len >= data_len)
+				printf(" if statement true\n");
+			else
+				printf("if statement fasle\n");
+#endif
 			if (len >= data_len)
 			{
+#ifdef DEBUG
+				printf("case - Writing Deleted Position\n");
+#endif
 				// Get pre_deleted data
-				int pre_page, pre_record;
-				memcpy(&pre_page, pagebuff + HEADER_AREA_SIZE + len + 1, 4);
-				memcpy(&pre_record, pagebuff + HEADER_AREA_SIZE + len + 5, 4);
 
 				// Update Data
-				strcpy(pagebuff + HEADER_AREA_SIZE + len, recrdbuff);
+				strncpy(pagebuff + HEADER_AREA_SIZE + offset, recrdbuff,data_len);
+
+
+				/* HEADER area ì˜ Meta data update Code í•„ìš” */
+				memset(pagebuff + HEADER_AREA_totalrecord_SIZE + HEADER_AREA_RECORDMETADATA_SIZE * cur_record + HEADER_AREA_offset_SIZE, data_len, 4);
 
 				// Update Metadata
 				if (next_page == -1 && next_record == -1)
 				{
-
+#ifdef DEBUG
+					printf("This is nextPage == -1\n");
+#endif
 					HEAD_RECORD_Del_page = pre_page;
 					HEAD_RECORD_Del_recrd = pre_record;
 					Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
 				}
-				else 
+				else
 				{
+#ifdef DEBUG
+					printf("This is else\n");
+					printf("pre_page : %d\n", pre_page);
+					printf("pre_record : %d\n", pre_record);
+					printf("next_page : %d\n", next_page);
+					printf("next_record : %d\n", next_record);
+					printf("cur_page : %d\n", cur_page);
+					printf("cur_record : %d\n", cur_record);
+#endif
 					char *temp_page_buff = (char *)malloc(sizeof(char) * PAGE_SIZE);
 					readPage(fp, temp_page_buff, next_page);
 					int next_offset;
-					memcpy(&next_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * next_record, 4);
+					memcpy(&next_offset, temp_page_buff + HEADER_AREA_totalrecord_SIZE + (HEADER_AREA_offset_SIZE + HEADER_AREA_length_SIZE) * next_record, 4);
 					/*
 						before Situation.
 							next_deleted -> cur_deleted -> pre_deleted 
@@ -399,29 +353,48 @@ void add(FILE *fp, const Person *p)
 					memset(temp_page_buff + HEADER_AREA_SIZE + next_offset + 1, pre_page, 4);
 					memset(temp_page_buff + HEADER_AREA_SIZE + next_offset + 5, pre_record, 4);
 					writePage(fp, temp_page_buff, next_page);
+
 				}
-				return;
+					writePage(fp,pagebuff,cur_page);
+					return;
 			}
 
 			// Update cur/next page & record
 			next_page = cur_page;
 			next_record = cur_record;
-			memcpy(&cur_page,pagebuff+HEADER_AREA_SIZE+offset+1,4);
-			memcpy(&cur_record,pagebuff+HEADER_AREA_SIZE+offset+5,4);
+			cur_page = pre_page;
+			cur_record = pre_record;
+				printf("Before loop cur_record : %d\n",cur_record);
+			#ifdef DEBUG
+
+	printf("===================loop===================\n");
+	printf("before return looping(updated)\n");
+	printf("offset : %d\n",offset);
+	printf("len : %d\n",len);
+	printf("next_page : %d\n",next_page);
+	printf("next_record : %d\n",next_record);
+	printf("cur_page : %d\n",cur_page);
+	printf("cur_record : %d\n",cur_record);
+	PrintAllData(fp);
+	printf("===================End loop===================\n\n");
+	
+			#endif
+			
 		}
 	}
 }
-void Making_newPage(FILE *fp , char * databuff){
-	#ifdef DEBUG
+void Making_newPage(FILE *fp, char *databuff)
+{
+#ifdef DEBUG
 	printf("======================MAKING_NEWPAGE===================\n");
-	#endif
+#endif
 	int HEAD_RECORD_Allpage = -1;
 	int HEAD_RECORD_Allrecrd = -1;
 	int HEAD_RECORD_Del_page = -1;
 	int HEAD_RECORD_Del_recrd = -1;
-	Get_HeaderRecord(fp,&HEAD_RECORD_Allpage,&HEAD_RECORD_Allrecrd,&HEAD_RECORD_Del_page,&HEAD_RECORD_Del_recrd);
+	Get_HeaderRecord(fp, &HEAD_RECORD_Allpage, &HEAD_RECORD_Allrecrd, &HEAD_RECORD_Del_page, &HEAD_RECORD_Del_recrd);
 
-	char * pagebuff = (char *) malloc (sizeof(char) * PAGE_SIZE);	
+	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
 	int record_num;
 	int cur_record_offset;
 	int cur_record_len;
@@ -429,60 +402,162 @@ void Making_newPage(FILE *fp , char * databuff){
 	record_num = 1;
 	cur_record_offset = 0;
 	cur_record_len = strlen(databuff);
-	
-	// Update Record Area 
-	memcpy(pagebuff,&record_num,4);
-	memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE,&cur_record_offset,4);
-	memcpy(pagebuff+HEADER_AREA_totalrecord_SIZE+HEADER_AREA_offset_SIZE,&cur_record_len,4);
+
+	// Update Record Area
+	memcpy(pagebuff, &record_num, 4);
+	memcpy(pagebuff + HEADER_AREA_totalrecord_SIZE, &cur_record_offset, 4);
+	memcpy(pagebuff + HEADER_AREA_totalrecord_SIZE + HEADER_AREA_offset_SIZE, &cur_record_len, 4);
 
 	// Update Header Record
+	int cur_page = HEAD_RECORD_Allpage;
 	HEAD_RECORD_Allpage++;
 	HEAD_RECORD_Allrecrd++;
-	int cur_page = HEAD_RECORD_Allpage;
 	Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
-	#ifdef DEBUG
-	printf("Allpage : %d\n",HEAD_RECORD_Allpage);
-	printf("Allrecrd : %d\n",HEAD_RECORD_Allrecrd);
-	printf("Del_page : %d\n",HEAD_RECORD_Del_page);
-	printf("Del_recrd : %d\n",HEAD_RECORD_Del_recrd);
+#ifdef DEBUG
+	printf("Allpage : %d\n", HEAD_RECORD_Allpage);
+	printf("Allrecrd : %d\n", HEAD_RECORD_Allrecrd);
+	printf("Del_page : %d\n", HEAD_RECORD_Del_page);
+	printf("Del_recrd : %d\n", HEAD_RECORD_Del_recrd);
+
 	printf("======================MAKING_NEWPAGE_END===============\n");
 
-	#endif
+#endif
 	// Write Data
 	strcpy(pagebuff + HEADER_AREA_SIZE + cur_record_offset, databuff);
 	writePage(fp, pagebuff, cur_page);
-
 }
 //
-// ÁÖ¹Î¹øÈ£¿Í ÀÏÄ¡ÇÏ´Â ·¹ÄÚµå¸¦ Ã£¾Æ¼­ »èÁ¦ÇÏ´Â ±â´ÉÀ» ¼öÇàÇÑ´Ù.
+// ì£¼ë¯¼ë²ˆí˜¸ì™€ ì¼ì¹˜í•˜ëŠ” ë ˆì½”ë“œë¥¼ ì°¾ì•„ì„œ ì‚­ì œí•˜ëŠ” ê¸°ëŠ¥ì„ ìˆ˜í–‰í•œë‹¤.
 //
-void delete(FILE *fp, const char *id)
+void delete (FILE *fp, const char *id)
 {
+	int HEAD_RECORD_Allpage = -1;
+	int HEAD_RECORD_Allrecrd = -1;
+	int HEAD_RECORD_Del_page = -1;
+	int HEAD_RECORD_Del_recrd = -1;
+	Get_HeaderRecord(fp, &HEAD_RECORD_Allpage, &HEAD_RECORD_Allrecrd, &HEAD_RECORD_Del_page, &HEAD_RECORD_Del_recrd);
+
+	printf("1");
+	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
+	int page_Allrecord;
+	int page_offset;
+	int page_len;
+	for (int i = 0; i < HEAD_RECORD_Allpage; i++)
+	{
+		/* i's page , find matched id */
+		readPage(fp, pagebuff, i);
+		memcpy(&page_Allrecord, pagebuff, 4);
+		for (int j = 0; j < page_Allrecord; j++)
+		{
+			char data_id[14];
+			char *temp_data = (char *)malloc(sizeof(char) * (MAX_RECORD_SIZE + 8));
+			memcpy(&page_offset, pagebuff + HEADER_AREA_totalrecord_SIZE + HEADER_AREA_RECORDMETADATA_SIZE * j, 4);
+			memcpy(&page_len, pagebuff + HEADER_AREA_totalrecord_SIZE + HEADER_AREA_RECORDMETADATA_SIZE * j + HEADER_AREA_offset_SIZE, 4);
+			memcpy(temp_data, pagebuff + HEADER_AREA_SIZE + page_offset, page_len);
+			Person *temp = (Person *)malloc(sizeof(Person));
+			unpack(temp_data, temp);
+			strcpy(data_id, temp->id);
+
+			if (data_id[0] == '*')
+				continue;
+			if (strcmp(data_id, id) == 0)
+			{
+				// Delete
+				printf("Deleted\n");
+
+				// Update Data
+				memset(pagebuff + HEADER_AREA_SIZE + page_offset, '*', 1);
+				memcpy(pagebuff + HEADER_AREA_SIZE + page_offset + 1,&HEAD_RECORD_Del_page, 4);
+				memcpy(pagebuff + HEADER_AREA_SIZE + page_offset + 5, &HEAD_RECORD_Del_recrd, 4);
+				
+				// Update HEAD record
+				HEAD_RECORD_Del_page = i;
+				HEAD_RECORD_Del_recrd = j;
+	Update_HeaderRecord(fp, HEAD_RECORD_Allpage, HEAD_RECORD_Allrecrd, HEAD_RECORD_Del_page, HEAD_RECORD_Del_recrd);
+
+
+				writePage(fp, pagebuff, i);
+				return;
+			}
+		}
+	}
+	printf("Not Detected\n");
+}
+void PrintAllData(FILE * fp){
+	int HEAD_RECORD_Allpage = 0;
+	int HEAD_RECORD_Allrecrd = 0;
+	int HEAD_RECORD_Del_page = -1;
+	int HEAD_RECORD_Del_recrd = -1;
+	Get_HeaderRecord(fp, &HEAD_RECORD_Allpage, &HEAD_RECORD_Allrecrd, &HEAD_RECORD_Del_page, &HEAD_RECORD_Del_recrd);
+
+	int RECORD_NUM;
+	printf("HEAD_RECORD_ALLPAGE : %d\n", HEAD_RECORD_Allpage);
+	printf("HEAD_RECORD_Allrecrd : %d\n", HEAD_RECORD_Allrecrd);
+	printf("HEAD_RECORD_Del_page : %d\n", HEAD_RECORD_Del_page);
+	printf("HEAD_RECORD_Del_recrd : %d\n", HEAD_RECORD_Del_recrd);
+	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
+	for (int i = 0; i < HEAD_RECORD_Allpage; i++)
+	{
+		readPage(fp, pagebuff, i);
+		memcpy(&RECORD_NUM, pagebuff, 4);
+		printf("[%d page]\n", i);
+		printf("[%d's RecordNum] : %d\n",i,RECORD_NUM);
+		for(int j=0;j<RECORD_NUM;j++){
+			int len,offset;
+			memcpy( &offset,pagebuff + 4 + 8 * j,4);
+			memcpy( &len,pagebuff + 4 + 8 * j + 4,4);
+			char * recordbuff = (char *) malloc (sizeof(char) * 9);
+			memcpy(recordbuff,pagebuff+HEADER_AREA_SIZE+offset,9);
+			printf("> %d record's offset : %d\n",j,offset);
+			printf("> %d record's len : %d\n",j,len);
+			if( recordbuff[0] != '*')
+				printf("> %d record : %s\n",j,recordbuff);
+			else{
+				int temp_page, temp_record;
+				memcpy(&temp_page,pagebuff+HEADER_AREA_SIZE+offset+1,4);
+				memcpy(&temp_record,pagebuff+HEADER_AREA_SIZE+offset+5,4);
+				printf("> %d record : %d,%d\n",j,temp_page,temp_record);
+				
+			}
+		}
+	}
+
+	return ;
 }
 
 int main(int argc, char *argv[])
 {
-	FILE *fp;  // ·¹ÄÚµå ÆÄÀÏÀÇ ÆÄÀÏ Æ÷ÀÎÅÍ
-	fp = fopen("test.dat","w+");
-	if(fp == NULL){
-		perror("fopen");
-		exit(1);
+	FILE *fp; // ë ˆì½”ë“œ íŒŒì¼ì˜ íŒŒì¼ í¬ì¸í„°
+	fp = fopen(argv[2], "r+");
+	if (fp == NULL)
+	{
+		fp = fopen(argv[2], "w+");
 	}
-	Person p1 ={
-		"20172600","yimo22","99","suwon","010","test@naver.com"
-	};
-	Person p2 ={
-		"20172610","yimo22","99","suwon","010","test@naver.com"
-	};
-	Person p3 ={
-		"20172620","yimo22","99","suwon","010","test@naver.com"
-	};
-	Person p4 ={
-		"20172630","yimo22","99","suwon","010","test@naver.com"
-	};
-	add(fp,&p1);
-	add(fp,&p2);
-	add(fp,&p3);
-	add(fp,&p4);
-	return 1;
+	Person p;
+	char input = 0;
+	switch ( **(argv + 1))
+	{
+	case 'd':
+		delete (fp, argv[3]);
+		break;
+
+	case 'a':
+		strcpy(p.id, argv[3]);
+		strcpy(p.name, argv[4]);
+		strcpy(p.age, argv[5]);
+		strcpy(p.addr, argv[6]);
+		strcpy(p.phone, argv[7]);
+		strcpy(p.email, argv[8]);
+		printf("%s\n", p.id);
+		printf("%s\n", p.name);
+		add(fp, &p);
+		break;
+
+	default:
+		printf("Error-Invalid Input\n");
+		break;
+	}
+		PrintAllData(fp);
+
+	return 0;
 }
