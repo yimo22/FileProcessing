@@ -347,49 +347,6 @@ void delete (FILE *fp, const char *id)
 	}
 	fprintf(stderr, "Not Detected\n");
 }
-void PrintAllData(FILE *fp)
-{
-	int HEAD_RECORD_Allpage = 0;
-	int HEAD_RECORD_Allrecrd = 0;
-	int HEAD_RECORD_Del_page = -1;
-	int HEAD_RECORD_Del_recrd = -1;
-	Get_HeaderRecord(fp, &HEAD_RECORD_Allpage, &HEAD_RECORD_Allrecrd, &HEAD_RECORD_Del_page, &HEAD_RECORD_Del_recrd);
-
-	int RECORD_NUM;
-	printf("HEAD_RECORD_ALLPAGE : %d\n", HEAD_RECORD_Allpage);
-	printf("HEAD_RECORD_Allrecrd : %d\n", HEAD_RECORD_Allrecrd);
-	printf("HEAD_RECORD_Del_page : %d\n", HEAD_RECORD_Del_page);
-	printf("HEAD_RECORD_Del_recrd : %d\n", HEAD_RECORD_Del_recrd);
-	char *pagebuff = (char *)malloc(sizeof(char) * PAGE_SIZE);
-	for (int i = 0; i < HEAD_RECORD_Allpage; i++)
-	{
-		readPage(fp, pagebuff, i);
-		memcpy(&RECORD_NUM, pagebuff, 4);
-		printf("[%d page]\n", i);
-		printf("[%d's RecordNum] : %d\n", i, RECORD_NUM);
-		for (int j = 0; j < RECORD_NUM; j++)
-		{
-			int len, offset;
-			memcpy(&offset, pagebuff + 4 + 8 * j, 4);
-			memcpy(&len, pagebuff + 4 + 8 * j + 4, 4);
-			char *recordbuff = (char *)malloc(sizeof(char) * 9);
-			memcpy(recordbuff, pagebuff + HEADER_AREA_SIZE + offset, 9);
-			printf("> %d record's offset : %d\n", j, offset);
-			printf("> %d record's len : %d\n", j, len);
-			if (recordbuff[0] != '*')
-				printf("> %d record : %s\n", j, recordbuff);
-			else
-			{
-				int temp_page, temp_record;
-				memcpy(&temp_page, pagebuff + HEADER_AREA_SIZE + offset + 1, 4);
-				memcpy(&temp_record, pagebuff + HEADER_AREA_SIZE + offset + 5, 4);
-				printf("> %d record : %d,%d\n", j, temp_page, temp_record);
-			}
-		}
-	}
-
-	return;
-}
 int main(int argc, char *argv[])
 {
 	FILE *fp; // 레코드 파일의 파일 포인터
@@ -419,7 +376,5 @@ int main(int argc, char *argv[])
 		printf("Error-Invalid Input\n");
 		break;
 	}
-
-	PrintAllData(fp);
 	return 0;
 }
